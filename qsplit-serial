@@ -1,0 +1,88 @@
+#!/home/users/hspark/anaconda2/bin/python
+#last modificaiton 171207
+
+import sys,subprocess,os, math
+
+try:
+	a=sys.argv[1]
+	if sys.argv[2]=='all':
+		b=sys.argv[2]
+	else:
+		b=int(sys.argv[2])
+	c=int(sys.argv[3])
+	d=sys.argv[4]
+except:
+	print('Error: incomplete arguments')
+	print('--Arguments--')
+	print('1: shell file to split and submit(eg. A.sh)')
+	print('2: number of commands of each qsub (eg. 1, 2, 3, ..., all) (execute serially)')
+	print('3: number of CPUs of each qsub (eg. 1)')
+	print('4: qsub query (eg. NE(not execute), short(10m), day(2d), week(8d), month(40d)')
+	print('5: memory allocation (eg. 8GB, 12GB)(optional)')
+	sys.exit()
+
+in_file=open(sys.argv[1]) # shell file
+nodes=1  # number of node per command
+#node designation
+if len(sys.argv) > 6:
+	t_node=sys.argv[6]
+	nodes='bnode'+t_node
+thread=int(sys.argv[3])  # plan to use thread per command
+qsubd=sys.argv[4] #qsub duration eg. NE(not excute), short(10m), day(2d), week(8d), month(40d),long(365d)
+cwd=os.getcwd()
+shno=len(in_file.readlines())
+if sys.argv[2]=='all':
+	n_cmd=shno
+else:
+	n_cmd=int(sys.argv[2]) # number of command per output
+outno=int(math.ceil(shno/float(n_cmd)))
+
+print('sh line No.= '+str(shno))
+print('cmd line per output sh NO. = '+str(n_cmd))
+print('Qsub No. = '+str(outno))
+os.system('mkdir -p qsub_cmd')
+os.system('mkdir -p qsub_sdout')
+
+in_file.seek(0)
+in_line=in_file.readline().strip()
+
+line_list=[]
+
+for i in range(0,outno):
+	line_list.append([])
+
+n=0
+while in_line:
+	line_list[n//n_cmd].append(in_line)
+	in_line=in_file.readline().strip()
+	n=n+1
+
+
+for i in range(0,outno):
+	out_file=open('./qsub_cmd/'+sys.argv[1].replace('.sh','_'+str(i+1)+'.sh'),'w')
+	sh_name=sys.argv[1].replace('.sh','_'+str(i+1)+'.sh')
+	out_file.write('#!/bin/bash\n')
+	out_file.write('#PBS -l nodes='+str(nodes)+':ppn='+str(thread)+'\n')
+	out_file.write('#PBS -j oe\n')
+	out_file.write('#PBS -o '+cwd+'/qsub_sdout/'+sh_name+'.sdout\n')
+	try: 
+		sys.argv[5]
+	except:
+		'blank'
+	else:
+		memory = sys.argv[5]
+		out_file.write('#PBS -l mem='+memory+'\n')
+	out_file.write('cd '+cwd+'\n')
+	out_file.write(" &\n".join(line_list[i]))
+	out_file.write('\nwait\n')
+	out_file.close()
+
+if qsubd=='NE':
+	'blank'
+else:
+	for i in range(0,outno):
+		sh_name=sys.argv[1].replace('.sh','_'+str(i+1)+'.sh')
+		qsubCMD='qsub -q '+qsubd+' ./qsub_cmd/'+sh_name
+		qsubExcute =subprocess.Popen(qsubCMD, shell=True)
+		qsubExcute.wait()
+		print(qsubCMD)
